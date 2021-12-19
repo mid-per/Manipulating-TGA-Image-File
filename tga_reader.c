@@ -3,6 +3,7 @@
 #include <string.h> // for memcmp
 #include <stdint.h> // for uint8_t
 
+
 typedef uint8_t ubyte;
 
 struct Pixel_arr {
@@ -10,8 +11,16 @@ struct Pixel_arr {
     size_t width;
     size_t height;
     ubyte format;
+    size_t colmap_width;
+    size_t colmap_size;
+    ubyte* color_data;
 };
 
+struct Pixel_Info{
+    size_t R, G, B, A;
+};
+
+typedef struct Pixel_Info PixelInfo;
 typedef struct Pixel_arr PixelArray;
 
 int main()
@@ -19,7 +28,7 @@ int main()
     char c; // 1 byte
     unsigned char u; // 1 byte
 
-    FILE* fp = fopen("earth.tga", "rb");
+    FILE* fp = fopen("flag1.tga", "rb");
     FILE* outfile = NULL;
     if (fp == NULL) {
         fprintf(stderr, "cannot open file\n");
@@ -27,33 +36,54 @@ int main()
     }
 
     fseek(fp, 0, SEEK_END);
-    size_t fsize = ftell(fp);
-    // errno;
+    size_t fsize = ftell(fp); //get last position in file
 
     fseek(fp, 0, SEEK_SET);
-    ubyte* data = (ubyte*)malloc(fsize);
-
-    const ubyte tga_sig[7] = {0, 0, 2, 0, 0, 0, 0};
+    ubyte* data = (ubyte*)malloc(fsize); //size of ubyte is 1 btw
+    const ubyte tga_sig[3] = {0, 0, 2};
+    const ubyte tga_color_sig[3] = {0, 1, 2};//for non color tga
     const size_t tga_header_size = 18;
     PixelArray pix;
     pix.data = NULL;
 
-    int res = fread(data, 1, fsize, fp);
+    int res = fread(data, 1, fsize, fp); //this is where data get inputt
+    //test
+    //for(int i=0; i<19; i++){
+        //printf("%d=%d ", i, data[i]);
+    //}
+    //printf("\n");
+    //for(int i=19; i<10000; i++){
+       // printf("%d ", data[i]);
+   // }
     if (res < fsize) {
         fprintf(stderr, "invalid tga file\n");
         goto done;
     }
 
-    res = memcmp(tga_sig, data, sizeof(tga_sig));
+    if (data[1] = 0){
+        printf(" no color-map data is included with this image\n");
+        res = memcmp(tga_sig, data, sizeof(tga_sig));
+    }
+    else if (data[1] = 1){
+        printf("a color-map is included with this image\n");
+        res = memcmp(tga_color_sig, data, sizeof(tga_sig));
+    }
+    else{
+        fprintf(stderr, "invalid tga file\n");
+        goto done;
+    }
+
     if (res != 0) {
         fprintf(stderr, "invalid tga file\n");
         goto done;
     }
 
+    pix.colmap_width = data[5] + (data[6] << 8);
+    pix.colmap_size = data[7];
     pix.width = data[12] + (data[13] << 8);
     pix.height = data[14] + (data[15] << 8);
     pix.format = data[16];
-    if (pix.format != 24) {
+    if (pix.format != 24 && pix.format != 32){
         fprintf(stderr, "unsupported tga format\n");
         goto done;
     }
@@ -70,10 +100,44 @@ int main()
     ubyte buffer[18] = {};
     memcpy(buffer, tga_sig, sizeof(tga_sig));
     buffer[12] = pix.width;
-    buffer[13] = pix.width >> 8;
+    buffer[13] = pix.width >> 8; // = pix.width/(2^8)
     buffer[14] = pix.height;
     buffer[15] = pix.height >> 8;
     buffer[16] = pix.format;
+
+    ubyte* color_data = (ubyte*)malloc(pix.colmap_size * pix.colmap_width);
+    PixelInfo Pixel = {0};
+    int CurrentByte = 0;
+    size_t CurrentPixel = 19+data[0];
+    ubyte ChunkHeader = data[CurrentPixel];
+    int BytesPerPixel = data[16]/8; //data[16] is bits per pixel
+    ubyte buffer2[32] = {};
+    ubyte buffer3[32] = {};
+
+    while(CurrentPixel < CurrentPixel + (pix.colmap_size * pix.colmap_width)){
+        if(ChunkHeader < 128)
+        {
+            ++ChunkHeader;
+            for(int I = 0; I < ChunkHeader; ++I, ++CurrentPixel)
+            {
+                color_data[CurrentByte++] = Pixel.B;
+                color_data[CurrentByte++] = Pixel.G;
+                color_data[CurrentByte++] = Pixel.R;
+                if (data[16] > 24) color_data[CurrentByte++] = Pixel.A;
+            }
+        }
+        else
+        {
+            ChunkHeader -= 127;
+            for(int I = 0; I < ChunkHeader; ++I, ++CurrentPixel)
+            {
+                color_data[CurrentByte++] = Pixel.B;
+                color_data[CurrentByte++] = Pixel.G;
+                color_data[CurrentByte++] = Pixel.R;
+                if (data[16]  > 24) color_data[CurrentByte++] = Pixel.A;
+            }
+        }
+    } ;
 
     outfile = fopen("done.tga", "wb");
     fwrite(buffer, 1, sizeof(buffer), outfile);
@@ -81,7 +145,6 @@ int main()
 
 done:
     fclose(outfile);
-
     free(pix.data);
     free(data);
     fclose(fp);
