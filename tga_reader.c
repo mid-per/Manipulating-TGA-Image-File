@@ -63,11 +63,11 @@ int main()
         goto done;
     }
 
-    if (data[1] = 0){
+    if (data[1] == 0){
         printf(" no color-map data is included with this image\n");
         res = memcmp(tga_sig, data, sizeof(tga_sig));
     }
-    else if (data[1] = 1){
+    else if (data[1] == 1){
         printf("a color-map is included with this image\n");
         res = memcmp(tga_color_sig, data, sizeof(tga_sig));
     }
@@ -115,38 +115,39 @@ int main()
     ubyte ChunkHeader = {0};
     int BytesPerPixel = data[16]/ 8;
 
-    while(CurrentPixel < (pix.colmap_width * pix.colmap_size)){
-        if(ChunkHeader < 128)
-        {
-            ++ChunkHeader;
-            fread(ChunkHeader, 1, pix.colmap_width, fp);
-            for(int I = 0; I < ChunkHeader; ++I, ++CurrentPixel)
-            {
-                fread(Pixel, BytesPerPixel, 1, fp);
-                color_data[CurrentByte++] = Pixel->B;
-                color_data[CurrentByte++] = Pixel->G;
-                color_data[CurrentByte++] = Pixel->R;
-                if (data[16] > 24) color_data[CurrentByte++] = Pixel->A;
+    if(data[1] == 1) {
+        while (CurrentPixel < (pix.colmap_width * pix.colmap_size)) {
+            if (ChunkHeader < 128) {
+                ++ChunkHeader;
+                fread(ChunkHeader, 1, pix.colmap_width, fp);
+                for (int I = 0; I < ChunkHeader; ++I, ++CurrentPixel) {
+                    fread(Pixel, BytesPerPixel, 1, fp);
+                    color_data[CurrentByte++] = Pixel->B;
+                    color_data[CurrentByte++] = Pixel->G;
+                    color_data[CurrentByte++] = Pixel->R;
+                    if (data[16] > 24) color_data[CurrentByte++] = Pixel->A;
+                }
+            } else {
+                ChunkHeader -= 127;
+                for (int I = 0; I < ChunkHeader; ++I, ++CurrentPixel) {
+                    fread(Pixel, BytesPerPixel, 1, fp);
+                    color_data[CurrentByte++] = Pixel->B;
+                    color_data[CurrentByte++] = Pixel->G;
+                    color_data[CurrentByte++] = Pixel->R;
+                    if (data[16] > 24) color_data[CurrentByte++] = Pixel->A;
+                }
             }
         }
-        else
-        {
-            ChunkHeader -= 127;
-            for(int I = 0; I < ChunkHeader; ++I, ++CurrentPixel)
-            {
-                fread(Pixel, BytesPerPixel, 1, fp);
-                color_data[CurrentByte++] = Pixel->B;
-                color_data[CurrentByte++] = Pixel->G;
-                color_data[CurrentByte++] = Pixel->R;
-                if (data[16]  > 24) color_data[CurrentByte++] = Pixel->A;
-            }
-        }
-    } ;
-
+    }
 
     outfile = fopen("done.tga", "wb");
     fwrite(buffer, 1, sizeof(buffer), outfile);
-    fwrite(pix.data, 1, image_size, outfile);
+    if (data[1]==0){
+        fwrite(pix.data, 1, image_size, outfile);
+    }
+    else{
+        fwrite(color_data, 1, image_size, outfile);
+    }
 
 done:
     fclose(outfile);
